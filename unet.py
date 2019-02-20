@@ -14,7 +14,7 @@ vgg=tv.models.vgg11_bn(pretrained=True)
 image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225))])
 mask_transform=transforms.Compose([transforms.ToTensor()])
 trainset=my_data(transform=image_transform,target_transform=mask_transform)
-testset=my_data('val',image_transform,mask_transform)
+testset=my_data(image_set='val',transform=image_transform,target_transform=mask_transform)
 trainload=torch.utils.data.DataLoader(trainset,batch_size=4)
 testload=torch.utils.data.DataLoader(testset,batch_size=4)
 device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -47,17 +47,18 @@ class deconv(nn.Module):
 class UNET(nn.Module):
     def __init__(self):
         super(UNET,self).__init__()
-        self.conv1=vgg.features[:4] #64
-        self.conv2=vgg.features[4:8] #128
-        self.conv3=vgg.features[8:15] #256
-        self.conv4=vgg.features[15:22] #512
-        self.conv5=vgg.features[22:] #512
+        self.conv1=vgg.features[:3] #64
+        self.conv2=vgg.features[3:7] #128
+        self.conv3=vgg.features[7:14] #256
+        self.conv4=vgg.features[14:21] #512
+        self.conv5=vgg.features[21:28] #512
+        self.pool=vgg.features[-1]
         self.centre=deconv(512,512,256,True) #256
         self.up5=deconv(768,512,256,True)
-        self.up4=deconv(768,512,256,True)
-        self.up3=deconv(512,256,128,True)
-        self.up2=deconv(256,128,64,True)
-        self.up1=deconv(128,64,1,True)
+        self.up4=deconv(768,512,128,True)
+        self.up3=deconv(384,256,64,True)
+        self.up2=deconv(192,128,32,True)
+        self.up1=nn.Conv2d(32+64,1,3,padding=1)
     def forward(self, input):
         self.layer1=self.conv1(input)
         self.layer2=self.conv2(self.layer1)
@@ -65,26 +66,59 @@ class UNET(nn.Module):
         self.layer4=self.conv4(self.layer3)
         self.layer5=self.conv5(self.layer4)
 
-        self.middle=self.centre(self.layer5)
+        self.middle=self.centre(self.pool(self.layer5))
+        # print (self.layer1.shape)
+        # print (self.layer2.shape)
+        # print (self.layer3.shape)
+        # print (self.layer4.shape)
+        # print (self.layer5.shape)
 
+
+        self.middle=torch.nn.functional.pad(self.middle,(0,1,0,0),mode='replicate')
+        # print (self.middle.shape)
         self.uplayer5 = self.up5 (torch.cat((self.middle,self.layer5),dim=1))
         self.uplayer4 = self.up4 (torch.cat((self.uplayer5,self.layer4),dim=1))
         self.uplayer3 = self.up3 (torch.cat((self.uplayer4,self.layer3),dim=1))
         self.uplayer2 = self.up2 (torch.cat((self.uplayer3,self.layer2),dim=1))
         self.uplayer1 = self.up1 (torch.cat((self.uplayer2,self.layer1),dim=1))
+        # print (self.uplayer5.shape)
+        # print (self.uplayer4.shape)
+        # print (self.uplayer3.shape)
+        # print (self.uplayer2.shape)
+        # print (self.uplayer1.shape)
+
+
         return self.uplayer1
 
+class Diceloss(nn.Module):
+    def __init__(self):
+        super(Diceloss,self).__init__()
+    def dice_coef(self,x,y):
+        numerator=2*torch.sum(x*y)+0.0001
+        denominator=torch.sum(x**2)+torch.sum(y**2)+0.0001
+        return numerator/denominator
+    def forward(self, x,y):
+        return 1-self.dice_coef(x,y)
+class Bce_Diceloss(nn.Module):
+    def __init__(self,bce_rate=0.5):
+        super(Bce_Diceloss,self).__init__()
+        self.rate=bce_rate
+    def dice_coef(self,x,y):
+        numerator=2*torch.sum(x*y)+0.0001
+        denominator=torch.sum(x**2)+torch.sum(y**2)+0.0001
+        return numerator/denominator
+    def forward(self, x,y):
+        return (1-self.dice_coef(x,y))*(1-self.rate)+self.rate*torch.nn.functional.binary_cross_entropy(x,y)
 def train(epoch):
     model=UNET()
     model.train()
     model.to(device)
-    criterion=nn.CrossEntropyLoss()
-
+    criterion=Diceloss()
     optimize=torch.optim.Adam(model.parameters(),lr=0.001)
     for i in range(epoch):
         tmp=0
         for image,mask in trainload:
-            image,mask=image.to(device,dtype=dtype),mask.to(device,dtype=torch.long)
+            image,mask=image.to(device,dtype=dtype),mask.to(device,dtype=dtype)
             optimize.zero_grad()
             pred=model(image)
             loss=criterion(pred,mask)
@@ -92,9 +126,15 @@ def train(epoch):
             optimize.step()
             tmp=loss.data
             # print ("loss ",tmp)
+            break
         print ("{0} epoch ,loss is {1}".format(i,tmp))
     return model
-https://spandan-madan.github.io/A-Collection-of-important-tasks-in-pytorch/
-https://github.com/ybabakhin/kaggle_salt_bes_phalanx/blob/master/bes/losses.py
-https://arxiv.org/pdf/1606.04797.pdf#pdfjs.action=download
-okular
+
+
+
+model=train(1)
+
+# https://spandan-madan.github.io/A-Collection-of-important-tasks-in-pytorch/
+# https://github.com/ybabakhin/kaggle_salt_bes_phalanx/blob/master/bes/losses.py
+# https://arxiv.org/pdf/1606.04797.pdf#pdfjs.action=download
+# okular
