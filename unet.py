@@ -47,6 +47,101 @@ class deconv(nn.Module):
                                      )
     def forward(self, input):
         return self.block(input)
+class up(nn.Module):
+    def __init__(self,inchannel_low,inchannel_same,middlechannel,outchannel,transpose=False):
+        if  transpose:
+            self.block=nn.ConvTranspose2d(inchannel_low,middlechannel,3,2,1,1)
+            self.conv=nn.Sequential(nn.Conv2d(inchannel_same+inchannel_low,middlechannel,3,padding=1),
+                                nn.BatchNorm2d(middlechannel),
+                                nn.ReLU(inplace=True),
+                                nn.ConvTranspose2d(middlechannel,outchannel,3,2,1,1)
+                                )
+        else:
+            self.block=nn.Upsample(scale_factor=2,mode='bilinear',align_corners=True)
+            self.conv=nn.Sequential(nn.Conv2d(inchannel_same+inchannel_low,middlechannel,3,padding=1),
+                                nn.BatchNorm2d(middlechannel),
+                                nn.ReLU(inplace=True),
+                                nn.Conv2d(middlechannel,outchannel,1),
+                                nn.Upsample(scale_factor=2,mode='bilinear',align_corners=True))
+
+    def forward(self, uplayer,samlayer):
+        self.up=self.block(uplayer)
+        self.middle=torch.cat((self.up,samlayer),dim=1)
+        self.out=self.conv(self.middle)
+        return self.out
+class U_plus(nn.Module):
+    def __init__(self):
+        super(U_plus,self).__init__()
+        self.convl0_0=vgg.features[:3]
+        self.convl1_0=vgg.features[3:7] #128
+        self.convl2_0=vgg.features[7:14] #256
+        self.convl3_0=vgg.features[14:21] #512
+        self.convl4_0=vgg.features[21:28] #512
+        self.pool=vgg.features[-1]
+        self.convl5_0=nn.Sequential(nn.Conv2d(512,512,3,padding=1),
+                                   nn.BatchNorm2d(512),
+                                   nn.ReLU(inplace=True),
+                                   # nn.Conv2d(middlechannel,middlechannel,3,padding=0),
+                                   # nn.BatchNorm2d(middlechannel),
+                                   # nn.ReLU(inplace=True),
+                                  nn.ConvTranspose2d(512, 256, 3, 2)
+                                  )
+        self.deconvl4_1=deconv(768,512,256,True)
+        self.deconvl3_1=up(512,512,512,256,True)
+        self.deconvl2_1=up(512,256,512,256,True)
+        self.deconvl1_1=up(256,128,256,128,True)
+        self.deconvl0_1=up(128,64,128,64,True)
+        self.deconvl3_2=deconv(256+256+512,512,256,True)
+        self.deconvl2_2=deconv(256+256+256,512,256,True)
+        self.deconvl2_3=deconv(256+256+256+256,512,256,True)
+        self.deconvl1_2=deconv(256+128+128,256,128,True)
+        self.deconvl1_3=deconv(256+128+128+128,256,128,True)
+        self.deconvl1_4=deconv(256+128+128+128+128,384,128,True)
+        self.deconvl0_2=deconv(128+64,126,64,True)
+        self.deconvl0_3=deconv(128+64+64,128,64,True)
+        self.deconvl0_4=deconv(128+64+64+64,128,64,True)
+        self.deconvl0_5=deconv(128+64+64+64+64,128,64,True)
+        self.f0=nn.Conv2d(64,1,1)
+        self.f1=nn.Conv2d(64,1,1)
+        self.f2=nn.Conv2d(64,1,1)
+        self.f3=nn.Conv2d(64,1,1)
+        self.f4=nn.Conv2d(64,1,1)
+
+
+    def forward(self, input):
+        self.l0_0=self.convl0_0(input)
+        self.l1_0=self.convl1_0(self.l0_0)
+        self.l2_0=self.convl2_0(self.l1_0)
+        self.l3_0=self.convl3_0(self.l2_0)
+        self.l4_0=self.convl4_0(self.l3_0)
+        self.middle=self.convl5_0(self.pool(self.l4_0))
+        self.middle=self.center_crop(self.middle,self.l4_0)
+        self.l4_1=self.deconvl4_1(torch.cat((self.l4_0,self.middle),dim=1))
+        self.l3_1=self.deconvl3_1(self.l4_0,self.l3_0)
+        self.l3_2=self.deconvl3_2(torch.cat((self.l4_1,self.l3_1,self.l3_0),dim=1))
+        self.l2_1=self.deconvl2_1(self.l3_0,self.l2_0)
+        self.l2_2=self.deconvl2_2(torch.cat((self.l3_1,self.l2_0,self.l2_1),dim=1))
+        self.l2_3=self.deconvl2_3(torch.cat((self.l3_2,self.l2_0,self.l2_1,self.l2_2),dim=1))
+        self.l1_1=self.deconvl1_1(self.l2_0,self.l1_0)
+        self.l1_2=self.deconvl1_2(torch.cat((self.l2_1,self.l1_0,self.l1_1),dim=1))
+        self.l1_3=self.deconvl1_3(torch.cat((self.l2_2,self.l1_0,self.l1_1,self.l1_2),dim=1))
+        self.l1_4=self.deconvl1_4(torch.cat((self.l2_3,self.l1_0,self.l1_1,self.l1_2,self.l1_3),dim=1))
+        self.l0_1=self.deconvl0_1(self.l1_0,self.l0_0)
+        self.l0_2=self.deconvl0_2(torch.cat((self.l1_1,self.l0_0,self.l0_1),dim=1))
+        self.l0_3=self.deconvl0_3(torch.cat((self.l1_2,self.l0_0,self.l0_1,self.l0_2),dim=1))
+        self.l0_4=self.deconvl0_4(torch.cat((self.l1_3,self.l0_0,self.l0_1,self.l0_2,self.l0_3),dim=1))
+        self.l0_5=self.deconvl0_5(torch.cat((self.l1_4,self.l0_0,self.l0_1,self.l0_2,self.l0_3,self.l0_4),dim=1))
+
+
+        return self.f0(self.l0_1),self.f1(self.l0_2),self.f2(self.l0_3),self.f3(self.l0_4),self.f4(self.l0_5)
+
+
+    def center_crop(self,img,target):
+        h,w = img.shape[-2:]
+        th, tw = target.shape[-2:]
+        i = int(round((h - th) / 2.))
+        j = int(round((w - tw) / 2.))
+        return img[...,i:i+th,j:j+tw]
 class UNET(nn.Module):
     def __init__(self):
         super(UNET,self).__init__()
@@ -194,15 +289,19 @@ def torch_pic(img,pred,mask):
     tmp = tv.utils.make_grid(torch.cat((img.permute(0,3,1,2), pred, mask)), nrow=4)
     plt.imshow(tmp.permute(1,2,0))
     plt.show()
+def my_iou(label_pred,label_mask):
+    iou=[]
+    for i,j in zip(label_pred,label_mask):
+        iou.append((i*j).sum()/(i.sum()+j.sum()-(i*j).sum()))
+    return iou
 # model=train(20)
 # torch.save(model.state_dict(),'unet_up_pad')
 model=UNET()
 model.load_state_dict(torch.load('unet_up_pad'))
-
 img,pred,mask=test(model)
-
-torch_pic(img[:4],pred[:4].to(torch.long),mask[:4].to(torch.long))
-
+ap,iou,hist=label_acc_score(mask,pred,2)
+iu=my_iou(pred,mask)
+torch_pic(img[10:14],pred[10:14].to(torch.long),mask[10:14].to(torch.long))
 
 # a=torch.zeros(1,3,320,240)
 # tmp=UNET()
@@ -217,3 +316,4 @@ torch_pic(img[:4],pred[:4].to(torch.long),mask[:4].to(torch.long))
 # https://github.com/ybabakhin/kaggle_salt_bes_phalanx/blob/master/bes/losses.py
 # https://arxiv.org/pdf/1606.04797.pdf#pdfjs.action=download
 # okular
+#https://arxiv.org/abs/1505.02496
