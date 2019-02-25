@@ -356,10 +356,10 @@ def my_iou(label_pred,label_mask):
     for i,j in zip(label_pred,label_mask):
         iou.append((i*j).sum()/(i.sum()+j.sum()-(i*j).sum()))
     return iou
-model,loss_list=train(20)
+model,loss_list=train(60)
 torch.save(model.state_dict(),'uplus')
-
-# model.load_state_dict(torch.load('fullnet'))
+# model=U_plus()
+# model.load_state_dict(torch.load('uplus'))
 # img,pred,mask=test(model)
 # ap,iou,hist=label_acc_score(mask,pred,2)
 # iu=my_iou(pred,mask)
