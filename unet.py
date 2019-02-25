@@ -18,9 +18,10 @@ trainset=my_data(transform=image_transform,target_transform=mask_transform)
 testset=my_data(image_set='test',transform=image_transform,target_transform=mask_transform)
 trainload=torch.utils.data.DataLoader(trainset,batch_size=2)
 testload=torch.utils.data.DataLoader(testset,batch_size=1)
-device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device=torch.device('cpu')
 print (device)
-# device=torch.device('cpu')
+
 dtype=torch.float32
 class deconv(nn.Module):
     def __init__(self,inchannel,middlechannel,outchannel,transpose=False):
@@ -170,7 +171,11 @@ class U_plus(nn.Module):
         self.l0_5=self.deconvl0_5(self.l1_4,torch.cat((self.l0_0,self.l0_1,self.l0_2,self.l0_3,self.l0_4),dim=1))
 
 
-        return self.f0(self.l0_1),self.f1(self.l0_2),self.f2(self.l0_3),self.f3(self.l0_4),self.f4(self.l0_5)
+        return nn.functional.sigmoid(self.f0(self.l0_1)),\
+               nn.functional.sigmoid(self.f1(self.l0_2)),\
+               nn.functional.sigmoid(self.f2(self.l0_3)),\
+               nn.functional.sigmoid(self.f3(self.l0_4)),\
+               nn.functional.sigmoid(self.f4(self.l0_5))
 
 
     def center_crop(self,img,target):
@@ -283,7 +288,7 @@ def train(epoch):
     model=U_plus()
     model.train()
     model.to(device)
-    criterion=Diceloss()
+    criterion=Bce_Diceloss()
     optimize=torch.optim.Adam(model.parameters(),lr=0.0001)
     store_loss=[]
     for i in range(epoch):
@@ -307,17 +312,35 @@ def test(model):
     img=[]
     pred=[]
     mask=[]
+    l1_list=[]
+    l2_list=[]
+    l3_list=[]
+    l4_list=[]
+    l5_list=[]
     with torch.no_grad():
         model.eval()
         model.to(device)
         for image,mask_img in testload:
             image=image.to(device,dtype=dtype)
-            output=model(image)
+            l1,l2,l3,l4,output=model(image)
             label=output.cpu()>0.5
+            # l1_list.append((l1>0.5).to(torch.long))
+            # l2_list.append((l2>0.5).to(torch.long))
+            # l3_list.append((l3>0.5).to(torch.long))
+            # l4_list.append((l4>0.5).to(torch.long))
+            l1_list.append(l1)
+            l2_list.append(l2)
+            l3_list.append(l3)
+            l4_list.append(l4)
+            l5_list.append(output)
+
+
+
+
             pred.append(label.to(torch.long))
             img.append(image.cpu())
             mask.append(mask_img)
-    return torch.cat(img),torch.cat(pred),torch.cat(mask)
+    return torch.cat(img),torch.cat(pred),torch.cat(mask),[l1_list,l2_list,l3_list,l4_list,l5_list]
 
 def picture(img,pred,mask):
     # all must bu numpy object
@@ -353,16 +376,16 @@ def torch_pic(img,pred,mask):
     plt.show()
 def my_iou(label_pred,label_mask):
     iou=[]
-    for i,j in zip(label_pred,label_mask):
+    for i,j in zip(label_pred.to(torch.float),label_mask):
         iou.append((i*j).sum()/(i.sum()+j.sum()-(i*j).sum()))
     return iou
 model,loss_list=train(60)
 torch.save(model.state_dict(),'uplus')
 # model=U_plus()
-# model.load_state_dict(torch.load('uplus'))
-# img,pred,mask=test(model)
-# ap,iou,hist=label_acc_score(mask,pred,2)
-# iu=my_iou(pred,mask)
+# model.load_state_dict(torch.load('uplus',map_location='cpu'))
+# img,pred,mask,l=test(model)
+# ap,iou,hist,tmp=label_acc_score(mask,pred,2)
+# # iu=my_iou(pred,mask)
 # torch_pic(img[10:14],pred[10:14].to(torch.long),mask[10:14].to(torch.long))
 
 # a=torch.zeros(1,3,320,240)
@@ -380,3 +403,4 @@ torch.save(model.state_dict(),'uplus')
 # https://arxiv.org/pdf/1606.04797.pdf#pdfjs.action=download
 # okular
 #https://arxiv.org/abs/1505.02496
+# l0   l1

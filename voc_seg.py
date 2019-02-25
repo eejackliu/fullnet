@@ -55,10 +55,12 @@ def hist(label_true,label_pred,num_cls):
     return hist
 def label_acc_score(label_true,label_pred,num_cls):
     hist_matrix=np.zeros((num_cls,num_cls))
+    tmp=0
     for i,j in zip(label_true,label_pred):
         hist_matrix+=hist(i.cpu().numpy().flatten(),j.cpu().numpy().flatten(),num_cls)
+        tmp+=1
     diag=np.diag(hist_matrix)
     # acc=diag/hist_matrix.sum()
     acc_cls=diag/hist_matrix.sum(axis=0)
     m_iou=diag/(hist_matrix.sum(axis=1)+hist_matrix.sum(axis=0)-diag)
-    return acc_cls,m_iou,hist_matrix
+    return acc_cls,m_iou,hist_matrix,tmp
