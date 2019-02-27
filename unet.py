@@ -300,8 +300,8 @@ def train(epoch):
     model=U_plus()
     model.train()
     model=model.to(device)
-    criterion=Bce_Diceloss()
-    optimize=torch.optim.Adam(model.parameters(),lr=0.0001)
+    criterion=Diceloss()
+    optimize=torch.optim.Adam(model.parameters(),lr=0.001)
     store_loss=[]
     for i in range(epoch):
         tmp=0
@@ -311,11 +311,11 @@ def train(epoch):
             l1,l2,l3,l4,l5=model(image)
             loss_list=list(map(lambda x,y:criterion(x,y),[l1,l2,l3,l4,l5],[mask]*5))
             tmp=reduce(lambda x,y:x+y,loss_list)
-            loss=tmp/5
+            loss=tmp/5.
             loss.backward()
             optimize.step()
             tmp=loss.data
-            print ("loss ",tmp)
+            # print ("loss ",tmp)
             # break
         store_loss.append(tmp)
         print ("{0} epoch ,loss is {1}".format(i,tmp))
@@ -391,9 +391,29 @@ def my_iou(label_pred,label_mask):
     for i,j in zip(label_pred.to(torch.float),label_mask):
         iou.append((i*j).sum()/(i.sum()+j.sum()-(i*j).sum()))
     return iou
-a=torch.zeros(1,3,320,240)
-tmp=U_plus()
-b=tmp(a)
+model=U_plus()
+model.train()
+model=model.to(device)
+criterion=Diceloss()
+optimize=torch.optim.Adam(model.parameters(),lr=0.001)
+store_loss=[]
+for i in range(20):
+    tmp=0
+    for image,mask in trainload:
+        image,mask=image.to(device,dtype=dtype),mask.to(device,dtype=dtype)
+        optimize.zero_grad()
+        l1,l2,l3,l4,l5=model(image)
+        loss_list=list(map(lambda x,y:criterion(x,y),[l1,l2,l3,l4,l5],[mask]*5))
+        tmp=reduce(lambda x,y:x+y,loss_list)
+        loss=tmp/5.
+        loss.backward()
+        optimize.step()
+        tmp=loss.data
+        # print ("loss ",tmp)
+        # break
+    store_loss.append(tmp)
+    print ("{0} epoch ,loss is {1}".format(i,tmp))
+torch.save(model.state_dict(),'uplus')
 # def train_unet(epoch):
 #
 #     model=UNET()
