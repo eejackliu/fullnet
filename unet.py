@@ -16,7 +16,7 @@ image_transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((
 mask_transform=transforms.Compose([transforms.ToTensor()])
 trainset=my_data(transform=image_transform,target_transform=mask_transform)
 testset=my_data(image_set='test',transform=image_transform,target_transform=mask_transform)
-trainload=torch.utils.data.DataLoader(trainset,batch_size=2)
+trainload=torch.utils.data.DataLoader(trainset,batch_size=1)
 testload=torch.utils.data.DataLoader(testset,batch_size=1)
 # device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 device=torch.device('cpu')
@@ -125,25 +125,21 @@ class U_plus(nn.Module):
                                   # nn.ConvTranspose2d(512, 256, 3, 2)
                                   )
         self.deconvl4_1=crop_up(512,512,256,512,True)
-        self.deconvl3_1=up(512,512,256,512,True)
-        self.deconvl2_1=up(512,256,256,256,True)
-        self.deconvl1_1=up(256,128,128,128,True)
-        self.deconvl0_1=up(128,64,64,64,True)
-        self.deconvl3_2=up(512,512+512,256,512,True)
-        self.deconvl2_2=up(512,256+256,256,256,True)
-        self.deconvl2_3=up(512,256+256+256,256,256,True)
-        self.deconvl1_2=up(256,128+128,128,128,True)
-        self.deconvl1_3=up(256,128+128+128,128,128,True)
-        self.deconvl1_4=up(256,128+128+128+128,128,128,True)
-        self.deconvl0_2=up(128,64+64,64,64,True)
-        self.deconvl0_3=up(128,64+64+64,64,64,True)
-        self.deconvl0_4=up(128,64+64+64+64,64,64,True)
-        self.deconvl0_5=up(128,64+64+64+64+64,64,64,True)
-        self.f0=nn.Conv2d(64,1,1)
-        self.f1=nn.Conv2d(64,1,1)
-        self.f2=nn.Conv2d(64,1,1)
-        self.f3=nn.Conv2d(64,1,1)
-        self.f4=nn.Conv2d(64,1,1)
+        self.deconvl3_1=up(512,512,256,256,True)
+        self.deconvl2_1=up(512,256,128,128,True)
+        self.deconvl1_1=up(256,128,64,64,True)
+        self.deconvl0_1=up(128,64,32,1,True)
+        self.deconvl3_2=up(512,512+256,256,256,True)
+        self.deconvl2_2=up(256,256+128,128,128,True)
+        self.deconvl2_3=up(256,256+128+128,128,128,True)
+        self.deconvl1_2=up(128,128+64,64,64,True)
+        self.deconvl1_3=up(128,128+64+64,64,64,True)
+        self.deconvl1_4=up(128,128+64+64+64,64,64,True)
+        self.deconvl0_2=up(64,64+1,32,1,True)
+        self.deconvl0_3=up(64,64+1+1,32,1,True)
+        self.deconvl0_4=up(64,64+1+1+1,32,1,True)
+        self.deconvl0_5=up(64,64+1+1+1+1,32,1,True)
+
 
 
     def forward(self, input):
@@ -171,11 +167,11 @@ class U_plus(nn.Module):
         self.l0_5=self.deconvl0_5(self.l1_4,torch.cat((self.l0_0,self.l0_1,self.l0_2,self.l0_3,self.l0_4),dim=1))
 
 
-        return nn.functional.sigmoid(self.f0(self.l0_1)),\
-               nn.functional.sigmoid(self.f1(self.l0_2)),\
-               nn.functional.sigmoid(self.f2(self.l0_3)),\
-               nn.functional.sigmoid(self.f3(self.l0_4)),\
-               nn.functional.sigmoid(self.f4(self.l0_5))
+        return self.l0_1,\
+               self.l0_2,\
+               self.l0_3,\
+               self.l0_4,\
+               self.l0_5
 
 
     def center_crop(self,img,target):
@@ -184,66 +180,82 @@ class U_plus(nn.Module):
         i = int(round((h - th) / 2.))
         j = int(round((w - tw) / 2.))
         return img[...,i:i+th,j:j+tw]
-# class UNET(nn.Module):
-#     def __init__(self):
-#         super(UNET,self).__init__()
-#         self.conv1=vgg.features[:3] #64
-#         self.conv2=vgg.features[3:7] #128
-#         self.conv3=vgg.features[7:14] #256
-#         self.conv4=vgg.features[14:21] #512
-#         self.conv5=vgg.features[21:28] #512
-#         self.pool=vgg.features[-1]
-#         self.centre=nn.Sequential(nn.Conv2d(512,512,3,padding=1),
-#                                    nn.BatchNorm2d(512),
-#                                    nn.ReLU(inplace=True),
-#                                    # nn.Conv2d(middlechannel,middlechannel,3,padding=0),
-#                                    # nn.BatchNorm2d(middlechannel),
-#                                    # nn.ReLU(inplace=True),
-#                                   nn.ConvTranspose2d(512, 256, 3, 2)
-#                                   )
-#         # self.centre=deconv(512,512,256,True) #256
-#         self.up5=deconv(768,384,192,True)
-#         self.up4=deconv(704,352,176,True)
-#         self.up3=deconv(432,216,108,True)
-#         self.up2=deconv(236,118,60,True)
-#         self.up1=nn.Conv2d(124,1,3,padding=1)
-#     def forward(self, input):
-#         self.layer1=self.conv1(input)
-#         self.layer2=self.conv2(self.layer1)
-#         self.layer3=self.conv3(self.layer2)
-#         self.layer4=self.conv4(self.layer3)
-#         self.layer5=self.conv5(self.layer4)
-#
-#         self.middle=self.centre(self.pool(self.layer5))
-#         # print (self.layer1.shape)
-#         # print (self.layer2.shape)
-#         # print (self.layer3.shape)
-#         # print (self.layer4.shape)
-#         # print (self.layer5.shape)
-#         # print ('midddle')
-#         # print (self.middle.shape)
-#         # self.middle=torch.nn.functional.pad(self.middle,(0,1,0,0),mode='replicate')
-#         self.middle=self.center_crop(self.middle,self.layer5)
-#         # print (self.middle.shape)
-#         self.uplayer5 = self.up5 (torch.cat((self.middle,self.layer5),dim=1))
-#         self.uplayer4 = self.up4 (torch.cat((self.uplayer5,self.layer4),dim=1))
-#         self.uplayer3 = self.up3 (torch.cat((self.uplayer4,self.layer3),dim=1))
-#         self.uplayer2 = self.up2 (torch.cat((self.uplayer3,self.layer2),dim=1))
-#         self.uplayer1 = self.up1 (torch.cat((self.uplayer2,self.layer1),dim=1))
-#         # print (self.uplayer5.shape)
-#         # print (self.uplayer4.shape)
-#         # print (self.uplayer3.shape)
-#         # print (self.uplayer2.shape)
-#         # print (self.uplayer1.shape)
-#
-#
-#         return self.uplayer1
-#     def center_crop(self,img,target):
-#         h,w = img.shape[-2:]
-#         th, tw = target.shape[-2:]
-#         i = int(round((h - th) / 2.))
-#         j = int(round((w - tw) / 2.))
-#         return img[...,i:i+th,j:j+tw]
+class UNET(nn.Module):
+    def __init__(self):
+        super(UNET,self).__init__()
+        self.conv1=vgg.features[:3] #64
+        self.conv2=vgg.features[3:7] #128
+        self.conv3=vgg.features[7:14] #256
+        self.conv4=vgg.features[14:21] #512
+        self.conv5=vgg.features[21:28] #512
+        self.pool=vgg.features[-1]
+        # self.centre=nn.Sequential(nn.Conv2d(512,512,3,padding=1),
+        #                            nn.BatchNorm2d(512),
+        #                            nn.ReLU(inplace=True),
+        #                            # nn.Conv2d(middlechannel,middlechannel,3,padding=0),
+        #                            # nn.BatchNorm2d(middlechannel),
+        #                            # nn.ReLU(inplace=True),
+        #                           nn.ConvTranspose2d(512, 256, 3, 2)
+        #                           )
+        self.convl5_0=nn.Sequential(nn.Conv2d(512,512,3,padding=1),
+                                   nn.BatchNorm2d(512),
+                                   nn.ReLU(inplace=True),)
+        # self.centre=deconv(512,512,256,True) #256
+        # self.up5=deconv(768,384,192,True)
+        # self.up4=deconv(704,352,176,True)
+        # self.up3=deconv(432,216,108,True)
+        # self.up2=deconv(236,118,60,True)
+        # self.up1=nn.Conv2d(124,1,3,padding=1)
+        self.up5 = crop_up(512, 512, 256, 512, True)
+        self.up4 =up(512,512,256,512,True)
+        self.up3=up(512,256,256,256,True)
+        self.up2=up(256,128,128,128,True)
+        self.up1=up(128,64,64,64,True)
+        self.out=nn.Conv2d(64,1,1)
+    def forward(self, input):
+        self.layer1=self.conv1(input)
+        self.layer2=self.conv2(self.layer1)
+        self.layer3=self.conv3(self.layer2)
+        self.layer4=self.conv4(self.layer3)
+        self.layer5=self.conv5(self.layer4)
+
+        # self.middle=self.centre(self.pool(self.layer5))
+        # print (self.layer1.shape)
+        # print (self.layer2.shape)
+        # print (self.layer3.shape)
+        # print (self.layer4.shape)
+        # print (self.layer5.shape)
+        # print ('midddle')
+        # print (self.middle.shape)
+        # self.middle=torch.nn.functional.pad(self.middle,(0,1,0,0),mode='replicate')
+        # self.middle=self.center_crop(self.middle,self.layer5)
+        # print (self.middle.shape)
+        self.middle=self.convl5_0(self.pool(self.layer5))
+
+        self.uplayer5 = self.up5 (self.middle,self.layer5)
+        self.uplayer4=self.up4(self.uplayer5,self.layer4)
+        self.uplayer3 = self.up3 (self.uplayer4,self.layer3)
+        self.uplayer2 = self.up2 (self.uplayer3,self.layer2)
+        self.uplayer1 = self.up1 (self.uplayer2,self.layer1)
+        # self.uplayer5 = self.up5 (torch.cat((self.middle,self.layer5),dim=1))
+        # self.uplayer4 = self.up4 (torch.cat((self.uplayer5,self.layer4),dim=1))
+        # self.uplayer3 = self.up3 (torch.cat((self.uplayer4,self.layer3),dim=1))
+        # self.uplayer2 = self.up2 (torch.cat((self.uplayer3,self.layer2),dim=1))
+        # self.uplayer1 = self.up1 (torch.cat((self.uplayer2,self.layer1),dim=1))
+        # print (self.uplayer5.shape)
+        # print (self.uplayer4.shape)
+        # print (self.uplayer3.shape)
+        # print (self.uplayer2.shape)
+        # print (self.uplayer1.shape)
+
+
+        return self.out(self.uplayer1)
+    def center_crop(self,img,target):
+        h,w = img.shape[-2:]
+        th, tw = target.shape[-2:]
+        i = int(round((h - th) / 2.))
+        j = int(round((w - tw) / 2.))
+        return img[...,i:i+th,j:j+tw]
 class Diceloss(nn.Module):
     def __init__(self):
         super(Diceloss,self).__init__()
@@ -287,7 +299,7 @@ class Bce_Diceloss(nn.Module):
 def train(epoch):
     model=U_plus()
     model.train()
-    model.to(device)
+    model=model.to(device)
     criterion=Bce_Diceloss()
     optimize=torch.optim.Adam(model.parameters(),lr=0.0001)
     store_loss=[]
@@ -379,24 +391,73 @@ def my_iou(label_pred,label_mask):
     for i,j in zip(label_pred.to(torch.float),label_mask):
         iou.append((i*j).sum()/(i.sum()+j.sum()-(i*j).sum()))
     return iou
-model,loss_list=train(60)
-torch.save(model.state_dict(),'uplus')
+a=torch.zeros(1,3,320,240)
+tmp=U_plus()
+b=tmp(a)
+# def train_unet(epoch):
+#
+#     model=UNET()
+#     model.train()
+#     model=model.to(device)
+#     criterion=Diceloss()
+#     optimise=torch.optim.Adam(model.parameters(),1e-3)
+#     tmp=0
+#     for i in range(epoch):
+#         for img,mask in trainload:
+#             img,mask=img.to(device,dtype=dtype),mask.to(device,dtype=dtype)
+#             optimise.zero_grad()
+#             output=model(img)
+#             loss=criterion(output,mask)
+#             loss.backward()
+#             optimise.step()
+#             tmp=loss.data
+#             # print (loss.data)
+#         print ('num {0} loss {1}'.format(i,tmp))
+#     return model
+
+# from torchviz import make_dot
+# a=torch.zeros(1,3,320,240)
+# m=U_plus()
+# d=m(a)
+# make_dot(d,params=dict(m.named_parameters()))
+
+# model,loss_list=train(60)
+# torch.save(model.state_dict(),'uplus')
 # model=U_plus()
 # model.load_state_dict(torch.load('uplus',map_location='cpu'))
 # img,pred,mask,l=test(model)
 # ap,iou,hist,tmp=label_acc_score(mask,pred,2)
 # # iu=my_iou(pred,mask)
-# torch_pic(img[10:14],pred[10:14].to(torch.long),mask[10:14].to(torch.long))
+# torch_pic(img[0:4],pred[0:4].to(torch.long),mask[0:4].to(torch.long))
 
 # a=torch.zeros(1,3,320,240)
 # tmp=UNET()
 # tmp(a)
 
 #%%
+# def test_unet(model):
+#     img=[]
+#     pred=[]
+#     mask=[]
+#
+#     with torch.no_grad():
+#         model.eval()
+#         model=model.to(device)
+#         for image,mask_img in testload:
+#             image=image.to(device,dtype=dtype)
+#             output=model(image)
+#             label=output.cpu()>0.5
+#             # l1_list.append((l1>0.5).to(torch.long))
+#             # l2_list.append((l2>0.5).to(torch.long))
+#             # l3_list.append((l3>0.5).to(torch.long))
+#             # l4_list.append((l4>0.5).to(torch.long))
+#             pred.append(label.to(torch.long))
+#             img.append(image.cpu())
+#             mask.append(mask_img)
+#     return torch.cat(img),torch.cat(pred),torch.cat(mask)
 
-
-
-
+# model=train_unet(20)
+# torch.save(model.state_dict(),'unet')
 
 # https://spandan-madan.github.io/A-Collection-of-important-tasks-in-pytorch/
 # https://github.com/ybabakhin/kaggle_salt_bes_phalanx/blob/master/bes/losses.py
